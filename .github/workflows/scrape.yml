@@ -1,12 +1,48 @@
-name: Daily WARN Update
+name: Daily Parallel WARN Update
 
 on:
   schedule:
-    - cron: "0 0 * * *" # Runs at midnight
-  workflow_dispatch: # Allows manual run
+    - cron: "0 0 * * *"
+  workflow_dispatch:
 
 jobs:
-  build:
+  scrape-states:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        state: [
+          ak, al, ar, az, ca, co, ct, dc, de, fl, ga, hi, ia, id, il, in, ks, ky, 
+          la, ma, md, me, mi, mn, mo, ms, mt, nc, nd, ne, nh, nj, nm, nv, ny, oh, 
+          ok, or, pa, ri, sc, sd, tn, tx, ut, va, vt, wa, wi, wv, wy
+        ]
+    
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          
+      - name: Install Dependencies
+        run: pip install warn-scraper
+
+      - name: Scrape State
+        timeout-minutes: 15
+        continue-on-error: true 
+        run: |
+          mkdir -p data
+          warn-scraper ${{ matrix.state }} --data-dir ./data/
+
+      - name: Upload State Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: warn-data-${{ matrix.state }}
+          path: data/
+          retention-days: 1
+
+  merge-and-deploy:
+    needs: scrape-states
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -16,20 +52,23 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-      - name: Scrape
-        run: warn-scraper ca ny tx fl il --data-dir ./data/ # Start with these 5; change to 'all' later
-      - name: Merge and Notify
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-        run: |
-          python merge_data.py
-          python notify_slack.py
+      - name: Install Pandas
+        run: pip install pandas
+
+      - name: Download All Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: data/
+          pattern: warn-data-*
+          merge-multiple: true
+
+      - name: Run Merge Script
+        run: python merge_data.py
+
       - name: Commit and Push
         run: |
           git config user.name "Automation Bot"
           git config user.email "bot@github.com"
-          git add data/* national_warn_master.csv
-          git commit -m "Auto-update data" || exit 0
+          git add data/*.csv national_warn_master.csv
+          git commit -m "Auto-update data from successful scrapes" || exit 0
           git push
