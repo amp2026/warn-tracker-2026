@@ -1,0 +1,35 @@
+name: Daily WARN Update
+
+on:
+  schedule:
+    - cron: "0 0 * * *" # Runs at midnight
+  workflow_dispatch: # Allows manual run
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Scrape
+        run: warn-scraper ca ny tx fl il --data-dir ./data/ # Start with these 5; change to 'all' later
+      - name: Merge and Notify
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          python merge_data.py
+          python notify_slack.py
+      - name: Commit and Push
+        run: |
+          git config user.name "Automation Bot"
+          git config user.email "bot@github.com"
+          git add data/* national_warn_master.csv
+          git commit -m "Auto-update data" || exit 0
+          git push
