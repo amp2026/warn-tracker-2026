@@ -1,7 +1,0 @@
-[server]
-# This stops the "inotify" error by disabling file watching
-fileWatcherType = "none"
-
-[browser]
-# Optional: helps with cloud performance
-gatherUsageStats = false
