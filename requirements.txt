@@ -1,5 +1,5 @@
-warn-scraper
+streamlit>=1.30.0
 pandas
-streamlit
 plotly
+warn-scraper
 requests
